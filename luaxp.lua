@@ -6,12 +6,15 @@
 -- Author: Copyright (c) 2016,2018 Patrick Rigney <patrick@toggledbits.com>
 -- License: MIT License
 -- Github: https://github.com/toggledbits/luaxp
+--
+-- Modified by Choosechee
+-- Github: https://github.com/Choosechee/luaxp-5.4
 ------------------------------------------------------------------------
 
 local _M = {}
 
-_M._VERSION = "1.0.1"
-_M._VNUMBER = 10001
+_M._VERSION = "1.1"
+_M._VNUMBER = 10100
 _M._DEBUG = false -- Caller may set boolean true or function(msg)
 
 -- Binary operators and precedence (lower prec is higher precedence)
@@ -33,6 +36,7 @@ _M.binops = {
     , { op='~=', prec= 7 }
     , { op='&',  prec= 8 }
     , { op='^',  prec= 9 }
+	, { op='~',  prec= 9 }
     , { op='|',  prec=10 }
     , { op='&&', prec=11 }
     , { op='and', prec=11 }
@@ -43,8 +47,6 @@ _M.binops = {
 
 local MAXPREC = 99 -- value doesn't matter as long as it's >= any used in binops
 
-local string = require("string")
-local math = require("math")
 local base = _G
 
 local CONST = 'const'
@@ -92,7 +94,7 @@ end
 local function D(s, ...)
     if not _M._DEBUG then return end
     local str = string.gsub(s, "%%(%d+)", function( n )
-            n = tonumber(n, 10)
+            n = tonumber(n)
             if n < 1 or n > #arg then return "nil" end
             local val = arg[n]
             if base.type(val) == "table" then
@@ -552,7 +554,7 @@ local nativeFuncs = {
     , ['ltrim'] = { nargs = 1, impl = function( argv ) return xp_ltrim(tostring(argv[1])) end }
     , ['rtrim'] = { nargs = 1, impl = function( argv ) return xp_rtrim(tostring(argv[1])) end }
     , ['tostring'] = { nargs = 1, impl = function( argv ) if isNull(argv[1]) then return "" else return tostring(argv[1]) end end }
-    , ['tonumber'] = { nargs = 1, impl = function( argv ) if base.type(argv[1]) == "boolean" then if argv[1] then return 1 else return 0 end end return tonumber(argv[1], argv[2] or 10) or evalerror('Argument could not be converted to number') end }
+    , ['tonumber'] = { nargs = 1, impl = function( argv ) if base.type(argv[1]) == "boolean" then if argv[1] then return 1 else return 0 end end return tonumber(argv[1], argv[2]) or evalerror('Argument could not be converted to number') end }
     , ['format'] = { nargs = 1, impl = function( argv ) return string.format( unpack(argv) ) end }
     , ['split'] = { nargs = 1, impl = xp_split }
     , ['join'] = { nargs = 1, impl = xp_join }
@@ -570,31 +572,10 @@ local nativeFuncs = {
     , ['if'] = { nargs = 2, impl = true }
     , ['void'] = { nargs = 0, impl = function( argv ) return NULLATOM end }
     , ['list'] = { nargs = 0, impl = function( argv ) local b = deepcopy( argv ) b.__context=nil return b end }
+	, ['table'] = { nargs = 0, impl = function( argv ) return {} end }
     , ['first'] = { nargs = 1, impl = function( argv ) local arr = argv[1] if base.type(arr) ~= "table" or #arr == 0 then return NULLATOM else return arr[1] end end }
     , ['last'] = { nargs = 1, impl = function( argv ) local arr = argv[1] if base.type(arr) ~= "table" or #arr == 0 then return NULLATOM else return arr[#arr] end end }
 }
-
--- Try to load bit module; fake it if we don't find it or not right.
-local _, bit = pcall( require, "bit" )
-if not ( type(bit) == "table" and bit.band and bit.bor and bit.bnot and bit.bxor ) then
-    bit = nil
-end
-if not bit then
-    -- Adapted from "BitUtils", Lua-users wiki at http://lua-users.org/wiki/BitUtils; thank you kind stranger(s)...
-    bit = {}
-    bit['nand'] = function(x,y,z)
-        z=z or 2^16
-        if z<2 then
-            return 1-x*y
-        else
-            return bit.nand((x-x%z)/z,(y-y%z)/z,math.sqrt(z))*z+bit.nand(x%z,y%z,math.sqrt(z))
-        end
-    end
-    bit["bnot"]=function(y,z) return bit.nand(bit.nand(0,0,z),y,z) end
-    bit["band"]=function(x,y,z) return bit.nand(bit["bnot"](0,z),bit.nand(x,y,z),z) end
-    bit["bor"]=function(x,y,z) return bit.nand(bit["bnot"](x,z),bit["bnot"](y,z),z) end
-    bit["bxor"]=function(x,y,z) return bit["band"](bit.nand(x,y,z),bit["bor"](x,y,z),z) end
-end
 
 -- Let's get to work
 
@@ -1039,7 +1020,7 @@ local function coerce(val, typ)
     elseif typ == "number" then
         if vt == "boolean" then return val and 1 or 0
         elseif vt == "string" then
-            local n = tonumber(val,10) -- TODO ??? needs more complete parser (hex/octal/bin)
+            local n = tonumber(val) -- TODO ??? needs more complete parser (hex/octal/bin)
             if n ~= nil then return n else evalerror("Coersion from string to number failed ("..val..")") end
         end
         -- null coerces to NaN? We don't have NaN. Yet...
@@ -1050,7 +1031,7 @@ end
 
 local function isNumeric(val)
     if isNull(val) then return false end
-    local s = tonumber(val, 10)
+    local s = tonumber(val)
     if s == nil then return false
     else return true, s
     end
@@ -1238,21 +1219,21 @@ _run = function( atom, ctx, stack )
             if base.type(v1) ~= "number" or base.type(v2) ~= "number" then
                 v = coerce(v1, "boolean") and coerce(v2, "boolean")
             else
-                v = bit.band( coerce(v1, "number"), coerce(v2, "number") )
+                v = coerce(v1, "number") & coerce(v2, "number")
             end
         elseif e.op == '|' then
             -- If both operands are numbers, bitwise; otherwise boolean
             if base.type(v1) ~= "number" or base.type(v2) ~= "number" then
                 v = coerce(v1, "boolean") or coerce(v2, "boolean")
             else
-                v = bit.bor( coerce(v1, "number"), coerce(v2, "number") )
+                v = coerce(v1, "number") | coerce(v2, "number")
             end
-        elseif e.op == '^' then
+        elseif e.op == '^' or e.op == '~' then
             -- If both operands are numbers, bitwise; otherwise boolean
             if base.type(v1) ~= "number" or base.type(v2) ~= "number" then
                 v = coerce(v1, "boolean") ~= coerce(v2, "boolean")
             else
-                v = bit.bxor( coerce(v1, "number"), coerce(v2, "number") )
+                v = coerce(v1, "number") ~ coerce(v2, "number")
             end
         elseif e.op == '<' then
             if not check_operand(v1, {"number","string"}, v2) then evalerror("Invalid comparison ("
@@ -1300,7 +1281,7 @@ _run = function( atom, ctx, stack )
                 if type(ctx.__lvars[v1.name]) ~= "table" then evalerror("Target is not an array ("..v1.name..")", e.pos) end
                 local ix = runfetch( v1.index, ctx, stack )
                 D("_run: assignment to %1 with computed index %2", v1.name, ix)
-                if ix < 1 or type(ix) ~= "number" then evalerror("Invalid index ("..tostring(ix)..")", e.pos) end
+                if type(ix) ~= "number" or ix < 1 then evalerror("Invalid index ("..tostring(ix)..")", e.pos) end
                 ctx.__lvars[v1.name][ix] = v2
             else
                 ctx.__lvars[v1.name] = v2
@@ -1320,7 +1301,7 @@ _run = function( atom, ctx, stack )
             -- noop
         elseif e.op == '!' then
             if base.type(v) == "number" then
-                v = bit.bnot(v)
+                v = ~v
             else
                 v = not coerce(v, "boolean")
             end
