@@ -147,12 +147,12 @@ local function evalerror(msg, loc)
 end
 
 local function xp_pow( argv )
-    local b,x = unpack( argv or {} )
+    local b,x = table.unpack( argv or {} )
     return math.exp(x * math.log(b))
 end
 
 local function xp_select( argv )
-    local obj,keyname,keyval = unpack( argv or {} )
+    local obj,keyname,keyval = table.unpack( argv or {} )
     if base.type(obj) ~= "table" then evalerror("select() requires table/object arg 1") end
     keyname = tostring(keyname)
     keyval = tostring(keyval)
@@ -232,7 +232,7 @@ local function xp_parse_time( t )
             t = p[5] or "" -- advance token
         end
         -- We now have three components. Figure out their order.
-        p[5]=t p[6]=p[6]or"" D("p=%1,%2,%3,%4,%5", unpack(p))
+        p[5]=t p[6]=p[6]or"" D("p=%1,%2,%3,%4,%5", table.unpack(p))
         local first = tonumber(p[1]) or 0
         if order == nil and first > 31 then
             -- First is year (can't be month or day), assume y/m/d
@@ -458,7 +458,7 @@ local function xp_trim( s )
 end
 
 local function xp_keys( argv )
-    local arr = unpack( argv or {} )
+    local arr = table.unpack( argv or {} )
     if base.type( arr ) ~= "table" then evalerror("Array/table required") end
     local r = {}
     for k in pairs( arr ) do
@@ -544,7 +544,7 @@ local nativeFuncs = {
     , ['min']   = { nargs = 1, impl = xp_min }
     , ['max']   = { nargs = 1, impl = xp_max }
     , ['randomseed']   = { nargs = 0, impl = function( argv ) local s = argv[1] or os.time() math.randomseed(s) return s end }
-    , ['random']   = { nargs = 0, impl = function( argv ) return math.random( unpack(argv) ) end }
+    , ['random']   = { nargs = 0, impl = function( argv ) return math.random( table.unpack(argv) ) end }
     , ['len']   = { nargs = 1, impl = function( argv ) if isNull(argv[1]) then return 0 elseif type(argv[1]) == "table" then return xp_tlen(argv[1]) else return string.len(tostring(argv[1])) end end }
     , ['sub']   = { nargs = 2, impl = function( argv ) local st = tostring(argv[1]) local p = argv[2] local l = (argv[3] or -1) return string.sub(st, p, l) end }
     , ['find']  = { nargs = 2, impl = function( argv ) local st = tostring(argv[1]) local p = tostring(argv[2]) local i = argv[3] or 1 return (string.find(st, p, i) or 0) end }
@@ -555,13 +555,13 @@ local nativeFuncs = {
     , ['rtrim'] = { nargs = 1, impl = function( argv ) return xp_rtrim(tostring(argv[1])) end }
     , ['tostring'] = { nargs = 1, impl = function( argv ) if isNull(argv[1]) then return "" else return tostring(argv[1]) end end }
     , ['tonumber'] = { nargs = 1, impl = function( argv ) if base.type(argv[1]) == "boolean" then if argv[1] then return 1 else return 0 end end return tonumber(argv[1], argv[2]) or evalerror('Argument could not be converted to number') end }
-    , ['format'] = { nargs = 1, impl = function( argv ) return string.format( unpack(argv) ) end }
+    , ['format'] = { nargs = 1, impl = function( argv ) return string.format( table.unpack(argv) ) end }
     , ['split'] = { nargs = 1, impl = xp_split }
     , ['join'] = { nargs = 1, impl = xp_join }
     , ['time']  = { nargs = 0, impl = function( argv ) return xp_parse_time( argv[1] ) end }
     , ['timepart'] = { nargs = 0, impl = function( argv ) return os.date( argv[2] and "!*t" or "*t", argv[1] ) end }
-    , ['date'] = { nargs = 0, impl = function( argv ) return xp_mktime( unpack(argv) ) end }
-    , ['strftime'] = { nargs = 1, impl = function( argv ) return os.date(unpack(argv)) end }
+    , ['date'] = { nargs = 0, impl = function( argv ) return xp_mktime( table.unpack(argv) ) end }
+    , ['strftime'] = { nargs = 1, impl = function( argv ) return os.date(table.unpack(argv)) end }
     , ['dateadd'] = { nargs = 2, impl = function( argv ) return xp_date_add( argv ) end }
     , ['datediff'] = { nargs = 1, impl = function( argv ) return xp_date_diff( argv[1], argv[2] or os.time() ) end }
     , ['choose'] = { nargs = 2, impl = function( argv ) local ix = argv[1] if ix < 1 or ix > (#argv-2) then return argv[2] else return argv[ix+2] end end }
@@ -839,7 +839,7 @@ local function scan_unop( expr, index )
     local len = string.len(expr)
     if index > len then return index, nil end
     local ch = string.sub(expr, index, index)
-    if ch == '-' or ch == '+' or ch == '!' or ch == '#' then
+    if ch == '-' or ch == '+' or ch == '!' or ch =='~' or ch == '#' then
         -- We have a UNOP
         index = index + 1
         local k, r = scan_token( expr, index )
@@ -1299,8 +1299,8 @@ _run = function( atom, ctx, stack )
             v = -coerce(v, "number")
         elseif e.op == '+' then
             -- noop
-        elseif e.op == '!' then
-            if base.type(v) == "number" then
+        elseif e.op == '!' or e.op == '~' then
+			if base.type(v) == "number" then
                 v = ~v
             else
                 v = not coerce(v, "boolean")

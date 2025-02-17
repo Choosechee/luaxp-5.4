@@ -1,7 +1,7 @@
 -- Find the luaxp we're going to test
 local moduleName = arg[1] or "luaxp"
 local L = require(moduleName)
-local json = require "dkjson"
+local json = require("json")
 
 -- FOCUSTEST, when set, debug on for specific test number
 FOCUSTEST = 0
@@ -43,7 +43,7 @@ local function debugPrint( msg )
     print(string.char(27) .. "[0;34;40m" .. msg .. string.char(27) .. "[0m") -- debug in blue
 end
 -- Uncomment the line below to enable debugging
---L._DEBUG = debugPrint
+L._DEBUG = debugPrint
 
 local ctx = {}
 local nTest = 0
@@ -261,8 +261,11 @@ local function doNumericOpsTests()
     eval("7&8",0)
     eval("2|4",6)
     eval("6^4",2)
+	eval("6~4",2)
     eval("!8", -9)
     eval("!0", -1)
+	eval("~8", -9)
+    eval("~0", -1)
 
     -- Precedence tests
     eval("1+2*3", 7)
@@ -476,7 +479,7 @@ local function doMiscSyntaxTests()
         skip("['response'].['loadtime']", "JSON data not loaded")
         skip("response.notthere", "JSON data not loaded")
         skip("select( response.rooms, 'id', '14' ).name", "JSON data not loaded")
-        skip("response.notthere.reallynotthere", nil, "Can't dereference through null")
+        skip("response.notthere.reallynotthere", "nil", "Can't dereference through null")
         skip("select( response.rooms, 'id', '14' ).name", "Front Porch")
     end
 
@@ -607,3 +610,5 @@ print(string.format("Using module %s %s, ran %d tests, %d skipped, %d errors.", 
 if ctx.response == nil then
     print(RED.."JSON data not loaded, some tests skipped"..RESET)
 end
+
+io.read()

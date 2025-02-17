@@ -1,5 +1,11 @@
 # LuaXP Change Log
 
+## 1.1
+
+* Fixed code for Lua 5.4. May also work with Lua 5.3 (untested).
+* Replaced use of bit module with native bitwise operations.
+* Added `~` operator for parity with Lua's bitwise operation symbols. Using `~` as a unary operator works the same as `!`, and using it as a binary operator works the same as `^`.
+
 ## 1.0
 
 * Add `date(year[, month[ ,day[ ,hour[ ,min[ ,sec]]]]])` function to create datetime from parts as arguments. The current value is used for any part not provided (e.g. `date(null,1,1,0,0,0)` returns midnight Jan 1 of the current year. Trailing `null` arguments may be omitted (i.e. `date(2019,11,4)` is the same as `date(2019,11,4,null,null,null)`). Time is built in the current timezone.
